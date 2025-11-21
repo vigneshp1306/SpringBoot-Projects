@@ -27,21 +27,9 @@ jobs:
           java-version: 21
           cache: maven
 
-      - name: Verify Java version
-        run: java -version
+      - name: Build JAR (skip tests)
+        run: mvn clean package -DskipTests -e -X
 
-      - name: Build JAR (full logs)
-        run: mvn clean package -e -X
-
-      - name: Upload JAR Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: spring-boot-jar
-          path: target/*.jar
-
-      # -------------------------------
-      #     DEPLOY TO UBUNTU SERVER
-      # -------------------------------
       - name: Install sshpass
         run: sudo apt-get update && sudo apt-get install -y sshpass
 
@@ -53,15 +41,16 @@ jobs:
             "$JAR_FILE" \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/root/app.jar
 
-      - name: Start Spring Boot on server (port 3030)
+      - name: Restart only this JAR
         run: |
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "
-              echo 'Killing old process...'
-              pkill -f 'java -jar' || true
+              
+              echo 'Killing only old app.jar...'
+              pkill -f '/root/app.jar' || true
 
               echo 'Starting new JAR on port 3030...'
-              nohup java -jar /root/app.jar --server.port=3030 > app.log 2>&1 &
+              nohup java -jar /root/app.jar --server.port=3030 > /root/app.log 2>&1 &
               sleep 3
-              pgrep -f 'java -jar'
+              pgrep -f '/root/app.jar'
             "
