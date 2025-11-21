@@ -1,4 +1,4 @@
-name: Spring Boot CI + Deploy
+name: Spring Boot CI + PM2 Deploy
 
 on:
   push:
@@ -37,16 +37,34 @@ jobs:
         run: |
           JAR_FILE=$(ls target/*.jar | head -n 1)
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" \
-            scp -o StrictHostKeyChecking=no \
-            "$JAR_FILE" \
+            scp -o StrictHostKeyChecking=no "$JAR_FILE" \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/root/app.jar
 
-      - name: Reload app with PM2
+      - name: Deploy with PM2
         run: |
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" ssh -o StrictHostKeyChecking=no \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "
-              echo 'Reloading Spring Boot App using PM2...'
-              pm2 reload spring-app || pm2 start 'java -jar /root/app.jar --server.port=3030' --name spring-app
-              pm2 save
-              pm2 status
-            "
+          ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "
+          
+            echo '📌 Checking Node installation...'
+            if ! command -v node &> /dev/null; then
+                echo '⬇ Installing NodeJS 18 (no sudo)...'
+                curl -fsSL https://deb.nodesource.com/setup_18.x -o nodesource_setup.sh
+                bash nodesource_setup.sh
+                apt-get install -y nodejs
+            fi
+
+            echo '📌 Installing PM2 globally...'
+            npm install -g pm2
+
+            echo '📌 Checking if PM2 app exists...'
+            if pm2 list | grep -q 'spring-app'; then
+                echo '🔁 Reloading existing PM2 app...'
+                pm2 reload spring-app
+            else
+                echo '🚀 Starting Spring Boot app via PM2...'
+                pm2 start \"java -jar /root/app.jar --server.port=3030\" --name spring-app
+            fi
+
+            echo '💾 Saving PM2 startup...'
+            pm2 save
+          "
