@@ -28,7 +28,7 @@ jobs:
           cache: maven
 
       - name: Build JAR (skip tests)
-        run: mvn clean package -DskipTests -e -X
+        run: mvn clean package -DskipTests
 
       - name: Install sshpass
         run: sudo apt-get update && sudo apt-get install -y sshpass
@@ -41,16 +41,12 @@ jobs:
             "$JAR_FILE" \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/root/app.jar
 
-      - name: Restart only this JAR
+      - name: Reload app with PM2
         run: |
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "
-              
-              echo 'Killing only old app.jar...'
-              pkill -f '/root/app.jar' || true
-
-              echo 'Starting new JAR on port 3030...'
-              nohup java -jar /root/app.jar --server.port=3030 > /root/app.log 2>&1 &
-              sleep 3
-              pgrep -f '/root/app.jar'
+              echo 'Reloading Spring Boot App using PM2...'
+              pm2 reload spring-app || pm2 start 'java -jar /root/app.jar --server.port=3030' --name spring-app
+              pm2 save
+              pm2 status
             "
